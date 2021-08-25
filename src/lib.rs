@@ -169,22 +169,41 @@ impl Shortcode for Columns {
 <style>
     .mdbook-shortcodes-columns-container {
         display: flex;
-        margin: 0 -1.5em;
+        margin: 0 -1em;
     }
     .mdbook-shortcodes-column {
         flex: 50%;
-        padding: 0 1.5em;
+        padding: 0 1em;
     }
 </style>
 ";
 
-    fn process_match(input: &str, _attributes: Vec<&str>) -> String {
+    fn process_match(input: &str, attrs: Vec<&str>) -> String {
+        let padding = match attrs.len() {
+            0 => None,
+            1 => Some(attrs[0]),
+            _ => panic!("too many arguments given to columns shortcode"),
+        };
+        let (container_style, column_style) = match padding {
+            Some(p) => (
+                format!("style=\"margin: 0 -{}\"", p),
+                format!("style=\"padding: 0 {}\"", p),
+            ),
+            None => (String::new(), String::new()),
+        };
+
         // Input and output will approximately be the same length.
         let mut result = String::with_capacity(input.len());
-        result.push_str("<div class=\"mdbook-shortcodes-columns-container\">");
+        result.push_str(&format!(
+            "<div class=\"mdbook-shortcodes-columns-container\" {}>",
+            container_style
+        ));
 
         for column_content in input.split("<--->") {
-            result.push_str("<div class=\"mdbook-shortcodes-column\">");
+            result.push_str(&format!(
+                "<div class=\"mdbook-shortcodes-column\" {}>",
+                column_style
+            ));
             result.push_str(column_content);
             result.push_str("</div>");
         }
@@ -262,20 +281,20 @@ Column 2
 <style>
     .mdbook-shortcodes-columns-container {
         display: flex;
-        margin: 0 -1.5em;
+        margin: 0 -1em;
     }
     .mdbook-shortcodes-column {
         flex: 50%;
-        padding: 0 1.5em;
+        padding: 0 1em;
     }
 </style>
 
 # Example
-<div class=\"mdbook-shortcodes-columns-container\"><div class=\"mdbook-shortcodes-column\">
+<div class=\"mdbook-shortcodes-columns-container\" ><div class=\"mdbook-shortcodes-column\" >
 
 Column 1
 
-</div><div class=\"mdbook-shortcodes-column\">
+</div><div class=\"mdbook-shortcodes-column\" >
 
 Column 2
 

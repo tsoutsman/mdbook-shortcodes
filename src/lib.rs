@@ -3,8 +3,10 @@ use mdbook::{
     preprocess::{Preprocessor, PreprocessorContext},
 };
 
-const OPENING_DELIMETER: &str = "{{<";
-const CLOSING_DELIMETER: &str = ">}}";
+const START_OPENING_DELIMETER: &str = "{{#";
+const START_CLOSING_DELIMETER: &str = "}}";
+const END_OPENING_DELIMETER: &str = "{{/";
+const END_CLOSING_DELIMETER: &str = "}}";
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ShortcodesProcessor;
@@ -66,35 +68,43 @@ trait Shortcode {
 
     // TODO custom error type
     fn process_raw(input: &str) -> Result<String> {
-        // The start can contain attributes e.g. `{{< hint info >}}` or
-        // `{{< details "Title" open}}`.
-        let start_sequence = format!("{} {}", OPENING_DELIMETER, Self::NAME);
+        // The start can contain attributes e.g. `{{#hint info}}` or `{{#details "Title" open}}`
+        // so we only look for the opening delimiter followed by the name. The closing delimeter
+        // (i.e. "}}") is taken into account later.
+        let start_sequence = format!("{}{}", START_OPENING_DELIMETER, Self::NAME);
         let end_sequence = format!(
-            "{} /{} {}",
-            OPENING_DELIMETER,
+            "{}{}{}",
+            END_OPENING_DELIMETER,
             Self::NAME,
-            CLOSING_DELIMETER
+            END_CLOSING_DELIMETER
         );
 
         let mut result = input.to_owned();
 
         for (i, _) in input.match_indices(&start_sequence) {
-            // The index of the attributes start. For example:
-            // {{< details "Title" open >}}
-            //            ^ here
+            // The index of the attributes start.
+            // {{#columns 3em}}
+            //           ^ here
             let attrs_start_index = i + start_sequence.len();
-            // The index of the end of the inner content. For example:
-            // {{< details "Title" open >}}
-            //                     here ^
-            let attrs_end_index = match input[attrs_start_index..].find(CLOSING_DELIMETER) {
+
+            // The index of the end of the attributes.
+            // {{#columns 3em}}
+            //               ^ here
+            let attrs_end_index = match input[attrs_start_index..].find(START_CLOSING_DELIMETER) {
                 Some(i) => attrs_start_index + i,
-                // TODO technically this is a different issue than the one below, so it shouldn't
-                // use this enum variant.
+                // TODO technically this is a different error than the one below, so it shouldn't
+                // use this error variant.
                 None => return Err(Error::NoClosingShortcode),
             };
             let attrs = split_attrs(&input[attrs_start_index..attrs_end_index])?;
 
-            let content_start_index = attrs_end_index + CLOSING_DELIMETER.len();
+            // The index of the start of the content.
+            // {{#columns 3em}}
+            //                 ^ here (it is usually on a new line)
+            let content_start_index = attrs_end_index + START_CLOSING_DELIMETER.len();
+            // The index of the end of the content.
+            // {{/columns}}
+            // ^ here (note this is a closing tag)
             let content_end_index = match input[content_start_index..].find(&end_sequence) {
                 Some(i) => content_start_index + i,
                 // No closing tag.
@@ -127,7 +137,6 @@ fn split_attrs(raw_attrs: &str) -> Result<Vec<&str>> {
     }
 
     for (i, c) in raw_attrs.char_indices() {
-        // TODO add more quote types. There is probably a better way of doing this.
         if is_quote(&c) {
             if in_quote {
                 result.push(&raw_attrs[attr_start_index..i]);
@@ -199,7 +208,7 @@ impl Shortcode for Columns {
             container_style
         ));
 
-        for column_content in input.split("<--->") {
+        for column_content in input.split("{{#column}}") {
             result.push_str(&format!(
                 "<div class=\"mdbook-shortcodes-column\" {}>",
                 column_style
@@ -267,15 +276,15 @@ mod tests {
         //
         let input = "
 # Example
-{{< columns >}}
+{{#columns}}
 
 Column 1
 
-<--->
+{{#column}}
 
 Column 2
 
-{{< /columns >}}
+{{/columns}}
 ";
         let expected = "
 <style>

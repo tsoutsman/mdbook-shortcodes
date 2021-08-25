@@ -1,4 +1,5 @@
-use mdbook_shortcodes::ShortcodesProcessor;
+mod lib;
+use lib::ShortcodesProcessor;
 
 use std::io;
 use std::process;

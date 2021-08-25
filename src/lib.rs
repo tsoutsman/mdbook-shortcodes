@@ -3,6 +3,9 @@ use mdbook::{
     preprocess::{Preprocessor, PreprocessorContext},
 };
 
+const OPENING_DELIMETER: &str = "{{<";
+const CLOSING_DELIMETER: &str = ">}}";
+
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Hash, Debug, Default)]
 pub struct ShortcodesProcessor;
 
@@ -64,8 +67,13 @@ trait Shortcode {
     fn process_raw(input: &str) -> Result<String> {
         // The start can contain attributes e.g. `{{< hint info >}}` or
         // `{{< details "Title" open}}`.
-        let start_sequence = format!("{{< {}", Self::NAME);
-        let end_sequence = format!("{{{{< /{} >}}}}", Self::NAME);
+        let start_sequence = format!("{} {}", OPENING_DELIMETER, Self::NAME);
+        let end_sequence = format!(
+            "{} /{} {}",
+            OPENING_DELIMETER,
+            Self::NAME,
+            CLOSING_DELIMETER
+        );
 
         let mut result = input.to_owned();
 
@@ -77,17 +85,17 @@ trait Shortcode {
             // The index of the end of the inner content. For example:
             // {{< details "Title" open >}}
             //                     here ^
-            let attrs_end_index = match input[attrs_start_index..].find(">}}") {
-                Some(i) => i,
+            let attrs_end_index = match input[attrs_start_index..].find(CLOSING_DELIMETER) {
+                Some(i) => attrs_start_index + i,
                 // TODO technically this is a different issue than the one below, so it shouldn't
                 // use this enum variant.
                 None => return Err(Error::NoClosingShortcode),
             };
-            let attrs = split_attributes(&input[attrs_start_index..attrs_end_index])?;
+            let attrs = split_attrs(&input[attrs_start_index..attrs_end_index])?;
 
-            let content_start_index = attrs_end_index + 3;
+            let content_start_index = attrs_end_index + CLOSING_DELIMETER.len();
             let content_end_index = match input[content_start_index..].find(&end_sequence) {
-                Some(i) => i,
+                Some(i) => content_start_index + i,
                 // No closing tag.
                 None => return Err(Error::NoClosingShortcode),
             };
@@ -95,7 +103,7 @@ trait Shortcode {
             let content_range = content_start_index..content_end_index;
 
             result.replace_range(
-                content_range.clone(),
+                i..content_end_index + end_sequence.len(),
                 &Self::process_match(&input[content_range], attrs),
             );
         }
@@ -104,13 +112,19 @@ trait Shortcode {
     }
 }
 
-fn split_attributes(raw_attrs: &str) -> Result<Vec<&str>> {
+fn split_attrs(raw_attrs: &str) -> Result<Vec<&str>> {
     let mut result = Vec::new();
     let mut attr_start_index = 0;
     let mut attr_end_index = 0;
     let mut in_quote = false;
 
     let raw_attrs = raw_attrs.trim();
+
+    // TODO
+    if raw_attrs.is_empty() {
+        return Ok(Vec::new());
+    }
+
     for (i, c) in raw_attrs.char_indices() {
         // TODO add more quote types. There is probably a better way of doing this.
         if is_quote(&c) {
@@ -152,11 +166,31 @@ impl Shortcode for Columns {
     const NAME: &'static str = "columns";
 
     fn process_match(input: &str, _attributes: Vec<&str>) -> String {
-        // They will be approximately the same length.
-        let _result = String::with_capacity(input.len());
-        let _columns = input.split("<--->");
+        // Input and output will approximately be the same length.
+        let mut result = String::with_capacity(input.len());
+        result.push_str(
+            "
+<style>
+    .mdbook-shortcodes-row {
+        display: flex;
+    }
+    .mdbook-shortcodes-column {
+        flex: 50%;
+    }
+</style>
+",
+        );
+        result.push_str("<div class=\"mdbook-shortcodes-row\">");
 
-        todo!();
+        for column_content in input.split("<--->") {
+            result.push_str("<div class=\"mdbook-shortcodes-column\">");
+            result.push_str(column_content);
+            result.push_str("</div>");
+        }
+
+        result.push_str("</div>");
+
+        result
     }
 }
 
@@ -206,6 +240,45 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_columns() {
+        //
+        let input = "
+# Example
+{{< columns >}}
+
+Column 1
+
+<--->
+
+Column 2
+
+{{< /columns >}}
+";
+        let expected = "
+# Example
+
+<style>
+    .mdbook-shortcodes-row {
+        display: flex;
+    }
+    .mdbook-shortcodes-column {
+        flex-grow: 1;
+    }
+</style>
+<div class=\"mdbook-shortcodes-row\"><div class=\"mdbook-shortcodes-column\">
+
+Column 1
+
+</div><div class=\"mdbook-shortcodes-column\">
+
+Column 2
+
+</div></div>
+";
+        assert_eq!(Columns::process_raw(input).unwrap(), expected);
+    }
+
+    #[test]
     fn test_split_attributes() {
         fn whitespace_variants(base: &str) -> Vec<String> {
             let mut result = vec![base.to_owned()];
@@ -224,6 +297,7 @@ mod tests {
         }
 
         let cases: Vec<(&str, Result<Vec<&str>>)> = vec![
+            ("", Ok(Vec::new())),
             ("my name is john", Ok(vec!["my", "name", "is", "john"])),
             ("c", Ok(vec!["c"])),
             ("c a", Ok(vec!["c", "a"])),
@@ -239,7 +313,7 @@ mod tests {
 
         for (input, expected) in cases {
             for i in whitespace_variants(input) {
-                assert_eq!(split_attributes(&i), expected);
+                assert_eq!(split_attrs(&i), expected);
             }
         }
     }

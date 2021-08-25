@@ -3,6 +3,8 @@ use mdbook::{
     preprocess::{Preprocessor, PreprocessorContext},
 };
 
+// The CSS class names used are purposefully verbose to ensure they don't conflict with anything.
+
 const START_OPENING_DELIMETER: &str = "{{#";
 const START_CLOSING_DELIMETER: &str = "}}";
 const END_OPENING_DELIMETER: &str = "{{/";
@@ -49,8 +51,8 @@ pub enum Error {
 impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let result = match self {
-            Error::NoClosingShortcode => "An opening shortcode had no matching closing shortcode",
-            Error::UnterminatedString => "A string did not contain a closing quote",
+            Error::NoClosingShortcode => "an opening shortcode had no matching closing shortcode",
+            Error::UnterminatedString => "a string did not contain a closing quote",
         };
         write!(f, "{}", result)
     }
@@ -61,7 +63,9 @@ impl std::error::Error for Error {}
 pub type Result<T> = std::result::Result<T, Error>;
 
 trait Shortcode {
+    /// The name that is used to call the shortcode.
     const NAME: &'static str;
+    /// Any code that should be placed once at the start of the page (e.g. css).
     const HEADER: &'static str;
 
     fn process_match(input: &str, attrs: Vec<&str>) -> String;
@@ -86,7 +90,6 @@ trait Shortcode {
             // {{#columns 3em}}
             //           ^ here
             let attrs_start_index = i + start_sequence.len();
-
             // The index of the end of the attributes.
             // {{#columns 3em}}
             //               ^ here
@@ -227,10 +230,55 @@ struct Hint;
 
 impl Shortcode for Hint {
     const NAME: &'static str = "hint";
-    const HEADER: &'static str = "";
+    const HEADER: &'static str = "
+<style>
+    .mdbook-shortcodes-hint {
+        padding: .5rem 2rem .5rem 1.75rem;
+        border-inline-start: .5rem solid #fff;
+        border-radius: .5rem;
+    }
 
-    fn process_match(_input: &str, _attrs: Vec<&str>) -> String {
-        todo!();
+    .mdbook-shortcodes-hint-info {
+        border-color: #6bf;
+        background-color: rgba(102,187,255,.1);
+    }
+
+    .mdbook-shortcodes-hint-ok {
+        border-color: #5b6;
+        background-color: rgba(85,187,102,.1);
+    }
+
+    .mdbook-shortcodes-hint-warning {
+        border-color: #fd6;
+        background-color: rgba(255,221,102,.1);
+    }
+
+    .mdbook-shortcodes-hint-danger {
+        border-color: #f66;
+        background-color: rgba(255,102,102,.1);
+    }
+</style>
+";
+
+    fn process_match(input: &str, attrs: Vec<&str>) -> String {
+        let ty = match attrs.len() {
+            1 => attrs[0],
+            _ => panic!("too many arguments given to columns shortcode"),
+        };
+
+        if let "info" | "ok" | "warning" | "danger" = ty {
+            let mut result = String::new();
+            result += &format!(
+                "<div class=\"mdbook-shortcodes-hint mdbook-shortcodes-hint-{}\">",
+                ty
+            );
+            result += input;
+            result += "</div>";
+            eprintln!("result: {}", result);
+            result
+        } else {
+            panic!("unknown hint type");
+        }
     }
 }
 
@@ -245,24 +293,12 @@ impl Shortcode for Tabs {
     }
 }
 
-struct Details;
-
-impl Shortcode for Details {
-    const NAME: &'static str = "details";
-    const HEADER: &'static str = "";
-
-    fn process_match(_input: &str, _attrs: Vec<&str>) -> String {
-        todo!();
-    }
-}
-
 fn process_chapter(content: &str) -> Result<String> {
     let mut result = content.to_owned();
 
     result = Columns::process_raw(&result)?;
     result = Hint::process_raw(&result)?;
     result = Tabs::process_raw(&result)?;
-    result = Details::process_raw(&result)?;
 
     Ok(result)
 }

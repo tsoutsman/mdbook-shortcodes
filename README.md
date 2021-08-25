@@ -3,7 +3,6 @@
 [![Crates.io](https://img.shields.io/crates/v/mdbook-shortcodes.svg)](https://crates.io/crates/mdbook-shortcodes)
 [![Docs.rs](https://docs.rs/mdbook-shortcodes/badge.svg)](https://docs.rs/mdbook-shortcodes)
 [![CI](https://github.com/tsoutsman/mdbook-shortcodes/workflows/CI/badge.svg)](https://github.com/tsoutsman/mdbook-shortcodes/actions)
-[![Coverage Status](https://coveralls.io/repos/github/tsoutsman/mdbook-shortcodes/badge.svg?branch=main)](https://coveralls.io/github/tsoutsman/mdbook-shortcodes?branch=main)
 
 ## Installation
 

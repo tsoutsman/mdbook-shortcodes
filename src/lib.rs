@@ -32,7 +32,7 @@ impl Preprocessor for ShortcodesProcessor {
     }
 
     fn supports_renderer(&self, renderer: &str) -> bool {
-        renderer == "html"
+        renderer == "html" || renderer == "markdown"
     }
 }
 
@@ -84,8 +84,18 @@ trait Shortcode {
         );
 
         let mut result = input.to_owned();
+        // `i` in the loop is the index that a match was found in the input string.
+        // However, at the end of every iteration we change result. This creates an
+        // issue as the replacement content is usually larger than the original content
+        // so the pointers such as `content_start_index` are all wrong. To account for
+        // this, we add an offset that tracks how much the length of `result` has changed.
+        // As the matches are processed is sequential order this means that we simply
+        // need to add the offset to the index of the match in `input` to get the index
+        // of the match in `result`.
+        let mut offset = 0;
 
         for (i, _) in input.match_indices(&start_sequence) {
+            let i = i + offset;
             // The index of the attributes start.
             // {{#columns 3em}}
             //           ^ here
@@ -93,13 +103,13 @@ trait Shortcode {
             // The index of the end of the attributes.
             // {{#columns 3em}}
             //               ^ here
-            let attrs_end_index = match input[attrs_start_index..].find(START_CLOSING_DELIMETER) {
+            let attrs_end_index = match result[attrs_start_index..].find(START_CLOSING_DELIMETER) {
                 Some(i) => attrs_start_index + i,
                 // TODO technically this is a different error than the one below, so it shouldn't
                 // use this error variant.
                 None => return Err(Error::NoClosingShortcode),
             };
-            let attrs = split_attrs(&input[attrs_start_index..attrs_end_index])?;
+            let attrs = split_attrs(&result[attrs_start_index..attrs_end_index])?;
 
             // The index of the start of the content.
             // {{#columns 3em}}
@@ -108,18 +118,20 @@ trait Shortcode {
             // The index of the end of the content.
             // {{/columns}}
             // ^ here (note this is a closing tag)
-            let content_end_index = match input[content_start_index..].find(&end_sequence) {
+            let content_end_index = match result[content_start_index..].find(&end_sequence) {
                 Some(i) => content_start_index + i,
                 // No closing tag.
                 None => return Err(Error::NoClosingShortcode),
             };
 
-            let content_range = content_start_index..content_end_index;
+            let replacement_content =
+                Self::process_match(&result[content_start_index..content_end_index], attrs);
 
             result.replace_range(
                 i..content_end_index + end_sequence.len(),
-                &Self::process_match(&input[content_range], attrs),
+                &replacement_content,
             );
+            offset += replacement_content.len() - (content_end_index + end_sequence.len() - i);
         }
 
         Ok(Self::HEADER.to_owned() + &result)
@@ -236,6 +248,7 @@ impl Shortcode for Hint {
         padding: .5rem 2rem .5rem 1.75rem;
         border-inline-start: .5rem solid #fff;
         border-radius: .5rem;
+        margin: 2.5rem 0;
     }
 
     .mdbook-shortcodes-hint-info {
@@ -274,7 +287,6 @@ impl Shortcode for Hint {
             );
             result += input;
             result += "</div>";
-            eprintln!("result: {}", result);
             result
         } else {
             panic!("unknown hint type");

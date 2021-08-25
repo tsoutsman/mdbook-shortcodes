@@ -60,6 +60,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 
 trait Shortcode {
     const NAME: &'static str;
+    const HEADER: &'static str;
 
     fn process_match(input: &str, attrs: Vec<&str>) -> String;
 
@@ -108,7 +109,7 @@ trait Shortcode {
             );
         }
 
-        Ok(result)
+        Ok(Self::HEADER.to_owned() + &result)
     }
 }
 
@@ -164,23 +165,23 @@ struct Columns;
 
 impl Shortcode for Columns {
     const NAME: &'static str = "columns";
+    const HEADER: &'static str = "
+<style>
+    .mdbook-shortcodes-columns-container {
+        display: flex;
+        margin: 0 -1.5em;
+    }
+    .mdbook-shortcodes-column {
+        flex: 50%;
+        padding: 0 1.5em;
+    }
+</style>
+";
 
     fn process_match(input: &str, _attributes: Vec<&str>) -> String {
         // Input and output will approximately be the same length.
         let mut result = String::with_capacity(input.len());
-        result.push_str(
-            "
-<style>
-    .mdbook-shortcodes-row {
-        display: flex;
-    }
-    .mdbook-shortcodes-column {
-        flex: 50%;
-    }
-</style>
-",
-        );
-        result.push_str("<div class=\"mdbook-shortcodes-row\">");
+        result.push_str("<div class=\"mdbook-shortcodes-columns-container\">");
 
         for column_content in input.split("<--->") {
             result.push_str("<div class=\"mdbook-shortcodes-column\">");
@@ -198,6 +199,7 @@ struct Hint;
 
 impl Shortcode for Hint {
     const NAME: &'static str = "hint";
+    const HEADER: &'static str = "";
 
     fn process_match(_input: &str, _attrs: Vec<&str>) -> String {
         todo!();
@@ -208,6 +210,7 @@ struct Tabs;
 
 impl Shortcode for Tabs {
     const NAME: &'static str = "tabs";
+    const HEADER: &'static str = "";
 
     fn process_match(_input: &str, _attrs: Vec<&str>) -> String {
         todo!();
@@ -218,6 +221,7 @@ struct Details;
 
 impl Shortcode for Details {
     const NAME: &'static str = "details";
+    const HEADER: &'static str = "";
 
     fn process_match(_input: &str, _attrs: Vec<&str>) -> String {
         todo!();
@@ -255,17 +259,19 @@ Column 2
 {{< /columns >}}
 ";
         let expected = "
-# Example
-
 <style>
-    .mdbook-shortcodes-row {
+    .mdbook-shortcodes-columns-container {
         display: flex;
+        margin: 0 -1.5em;
     }
     .mdbook-shortcodes-column {
-        flex-grow: 1;
+        flex: 50%;
+        padding: 0 1.5em;
     }
 </style>
-<div class=\"mdbook-shortcodes-row\"><div class=\"mdbook-shortcodes-column\">
+
+# Example
+<div class=\"mdbook-shortcodes-columns-container\"><div class=\"mdbook-shortcodes-column\">
 
 Column 1
 
@@ -275,7 +281,7 @@ Column 2
 
 </div></div>
 ";
-        assert_eq!(Columns::process_raw(input).unwrap(), expected);
+        assert_eq!(Columns::process_raw(input), Ok(expected.to_owned()));
     }
 
     #[test]
